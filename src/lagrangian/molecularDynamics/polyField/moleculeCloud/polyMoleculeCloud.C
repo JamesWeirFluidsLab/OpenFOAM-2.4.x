@@ -467,13 +467,26 @@ Foam::polyMoleculeCloud::polyMoleculeCloud
     moleculeTracking_(),
     cyclics_(t, mesh_, -1), 
     iL_(mesh, rU, cyclics_, pot_.pairPotentials().rCutMax(), "poly"),
-    ipl_(mesh.nCells())
+    ipl_(mesh.nCells()),
+    staticDil_(new int*[mesh_.nCells()]),
+    dilSizeList_(mesh_.nCells()),
+    cellOccSizeList_(mesh_.nCells())
 {
     polyMolecule::readFields(*this);
 
     rndGen.initialise(this->size() != 0 ? this->size() : 10000); //Initialise the random number cache (initialise to 10000 if size is zero)
 
     buildConstProps();
+    
+    // copy all dil information
+    forAll(iL_.dil(),d){
+	int size = iL_.dil()[d].size();
+	dilSizeList_[d] = size;
+	staticDil_[d] = new int[size];
+	forAll(iL_.dil()[d],j){
+	    staticDil_[d][j] = iL_.dil()[d][j];
+	}
+    }
 
     setSiteSizesAndPositions();
 
@@ -875,7 +888,7 @@ void Foam::polyMoleculeCloud::clearLagrangianFields()
 
 void Foam::polyMoleculeCloud::calculateForce()
 {
-    calculatePairForces();
+    ompCalculatePairForces();
 }
 
 void Foam::polyMoleculeCloud::setIPL()
@@ -906,6 +919,274 @@ void Foam::polyMoleculeCloud::prepareInteractions()
     iL_.setReferredParticles(cellOccupancy());
 }
 
+void Foam::polyMoleculeCloud::evaluatePairCritical
+(
+    polyMolecule* molI,
+    polyMolecule* molJ    
+)
+{
+    const pairPotentialList& pairPot = pot_.pairPotentials();
+    const pairPotential& electrostatic = pairPot.electrostatic();
+
+    label idI = molI->id();
+    label idJ = molJ->id();
+
+    const polyMolecule::constantProperties& constPropI(constProps(idI));
+    const polyMolecule::constantProperties& constPropJ(constProps(idJ));
+
+    // pair potential interactions
+    controllers_.controlDuringForceComputation(molI, molJ); 
+
+    fields_.measurementsDuringForceComputation
+    (
+        molI,
+        molJ
+    );
+
+    if(!molI->frozen() || !molJ->frozen())
+    {
+        // fraction
+        scalar f = molI->fraction();
+    
+        if(molJ->fraction() < f)
+        {
+            f = molJ->fraction();
+        }
+
+        forAll(constPropI.pairPotSites(), pI)
+        {
+        	label sI = constPropI.pairPotSites()[pI];
+
+            forAll(constPropJ.pairPotSites(), pJ)
+            {
+                label sJ = constPropJ.pairPotSites()[pJ];
+
+                Foam::vector rsIsJ = molI->sitePositions()[sI] - molJ->sitePositions()[sJ];
+
+                scalar rsIsJMagSq = magSqr(rsIsJ);
+
+                label idsI = constPropI.sites()[sI].siteId();
+                label idsJ = constPropJ.sites()[sJ].siteId();
+
+                if(pairPot.rCutSqr(idsI, idsJ, rsIsJMagSq))
+                {
+                    scalar rsIsJMag = mag(rsIsJ);
+
+                    Foam::vector fsIsJ = (rsIsJMag == 0.0? Foam::vector::zero : (f * (rsIsJ/rsIsJMag) * pairPot.force(idsI, idsJ, rsIsJMag)));
+
+
+                    scalar potentialEnergy
+                    (
+                        f*pairPot.energy(idsI, idsJ, rsIsJMag)
+                    );
+                    Foam::vector rIJ = molI->position() - molJ->position();
+                    Foam::tensor virialContribution = (rsIsJMagSq == 0.0? (rsIsJ*fsIsJ)*(rsIsJ & rIJ): (rsIsJ*fsIsJ)*(rsIsJ & rIJ)/rsIsJMagSq);
+
+		    molI->siteForces()[sI] += fsIsJ;
+                    molI->potentialEnergy() += 0.5*potentialEnergy;
+                    molI->rf() += virialContribution;
+#pragma omp critical (forces)
+		    {
+		    //molI->siteForces()[sI] += fsIsJ;
+
+                    molJ->siteForces()[sJ] += -fsIsJ;
+		    
+                    //molI->potentialEnergy() += 0.5*potentialEnergy;
+        
+                    molJ->potentialEnergy() += 0.5*potentialEnergy;
+        
+                    //Foam::vector rIJ = molI->position() - molJ->position();
+        
+                    //Foam::tensor virialContribution = (rsIsJMagSq == 0.0? (rsIsJ*fsIsJ)*(rsIsJ & rIJ): (rsIsJ*fsIsJ)*(rsIsJ & rIJ)/rsIsJMagSq);
+        
+                   // molI->rf() += virialContribution;
+                    molJ->rf() += virialContribution;
+		    }
+                    fields_.measurementsDuringForceComputationSite
+                    (
+                        molI,
+                        molJ,
+                        sI,
+                        sJ
+                    );
+                }
+            }
+        }
+
+        {
+            Foam::vector rIJ = molI->position() - molJ->position();
+    
+            scalar rIJMag = mag(rIJ);
+    
+            if(molI->R() > rIJMag)
+            {
+                molI->R() = rIJMag;
+            }
+    
+            if(molJ->R() > rIJMag)
+            {
+                molJ->R() = rIJMag;
+            }
+        }
+
+        forAll(constPropI.electrostaticSites(), pI)
+        {
+            label sI = constPropI.electrostaticSites()[pI];
+    
+            forAll(constPropJ.electrostaticSites(), pJ)
+            {
+                label sJ = constPropJ.electrostaticSites()[pJ];
+    
+                vector rsIsJ =
+                molI->sitePositions()[sI] - molJ->sitePositions()[sJ];
+    
+                scalar rsIsJMagSq = magSqr(rsIsJ);
+        
+                if(rsIsJMagSq < electrostatic.rCutSqr())
+                {
+                    scalar rsIsJMag = mag(rsIsJ);
+        
+                    scalar chargeI = constPropI.sites()[sI].siteCharge();
+                    scalar chargeJ = constPropJ.sites()[sJ].siteCharge();
+        
+                    vector fsIsJ =
+                        f*(rsIsJ/rsIsJMag)
+                        *chargeI*chargeJ*electrostatic.force(rsIsJMag);
+        
+                    //molI->siteForces()[sI] += fsIsJ;
+                    //molJ->siteForces()[sJ] += -fsIsJ;
+        
+                    scalar potentialEnergy =
+                        f*chargeI*chargeJ
+                        *electrostatic.energy(rsIsJMag);
+                    
+		    vector rIJ = molI->position() - molJ->position();
+                    tensor virialContribution =
+                        (rsIsJ*fsIsJ)*(rsIsJ & rIJ)/rsIsJMagSq;
+        
+                    molI->siteForces()[sI] += fsIsJ;
+                    molI->potentialEnergy() += 0.5*potentialEnergy;
+                    molI->rf() += virialContribution;
+                   
+#pragma omp critical (force2)
+{ 
+		    molJ->siteForces()[sJ] += -fsIsJ;
+        
+                    molJ->potentialEnergy() += 0.5*potentialEnergy;
+        
+                    //vector rIJ = molI->position() - molJ->position();
+        
+                    //tensor virialContribution =
+                    //    (rsIsJ*fsIsJ)*(rsIsJ & rIJ)/rsIsJMagSq;
+        
+                    molJ->rf() += virialContribution;
+}    
+                    fields_.measurementsDuringForceComputationSite
+                    (
+                        molI,
+                        molJ,
+                        sI,
+                        sJ
+                    );
+                }
+            }
+        }
+    }  
+}
+
+void Foam::polyMoleculeCloud::ompCalculatePairForces()
+{
+   prepareInteractions();
+   
+   std::vector<std::vector<polyMolecule*> > tempCellOcc(mesh_.nCells()); 
+   forAll(cellOccupancy_,c){
+       int size = cellOccupancy_[c].size();
+       tempCellOcc[c].resize(size);
+       cellOccSizeList_[c] = size;
+       forAll(cellOccupancy_[c],j){
+	   tempCellOcc[c][j] = cellOccupancy_[c][j]; 
+       }
+   }
+   
+   const labelListList& dil = iL_.dil();
+   int** tempdil = &staticDil_[0];
+
+   polyMolecule* cellOcc = tempCellOcc[0][0];
+   //pointer to dilsizelist and celloccupancysizelist
+   int* dilsize = &dilSizeList_[0];
+   int* cellsize = &cellOccSizeList_[0];
+   int sizedil = dilSizeList_.size();
+
+#pragma omp parallel 
+{
+#pragma omp single nowait
+{
+   for(int d = 0; d < sizedil; d++)
+#pragma omp task firstprivate(tempCellOcc,cellsize)
+   {
+	int sizecellocc = cellsize[d];
+	std::vector<polyMolecule*> templist = tempCellOcc[d];
+	for(int i = 0; i < sizecellocc; i++)
+	{
+	    polyMolecule* molI = templist[i]; 
+	    for(int j = i+1; j < sizecellocc; j++)
+	    {
+		polyMolecule* molJ = templist[j];
+		evaluatePair(molI,molJ);
+	    }	    
+	}
+   }
+}//end single region
+}//end parallel region 
+
+    for(int d = 0; d < sizedil; d++)
+    {
+#pragma omp parallel
+      {
+#pragma omp single nowait
+	{
+	std::vector<polyMolecule*> templistI = tempCellOcc[d];
+	int size = templistI.size();
+	for(int cellI = 0; cellI < size; cellI++)
+#pragma omp task firstprivate(templistI,tempCellOcc,dilsize)
+	{
+	    polyMolecule* molI = templistI[cellI];
+	    int sizeDilD = dilsize[d];
+	    for(int dj = 0; dj < sizeDilD; dj++)
+		{
+		    std::vector<polyMolecule*> cellJList = tempCellOcc[tempdil[d][dj]];
+		    int sizeCellJ = cellJList.size();
+		    for(int cellJ = 0; cellJ < sizeCellJ; cellJ++)
+		    {
+			polyMolecule* molJ = cellJList[cellJ];
+			evaluatePairCritical(molI,molJ);
+		    }//cellJ ends
+		}// dj ends
+	}
+	}//end single
+      }//end parallel region
+    }
+   
+   // Real-Referred interactions
+   for(int r = 0; r < iL_.refCellsParticles().size(); r++)
+   {
+       const List<label>& realCells = iL_.refCells()[r].neighbouringCells();
+       for(int i = 0; i < iL_.refCellsParticles()[r].size(); i++)
+       {
+	   polyMolecule* molJ = iL_.refCellsParticles()[r][i];
+	   for(int rc = 0; rc < realCells.size(); rc++)
+	   {
+	       List<polyMolecule*> cellIlist = cellOccupancy_[realCells[rc]];
+	       for(int i = 0; i < cellIlist.size(); i++)
+	       {
+		    polyMolecule* molI = cellIlist[i];
+		    evaluatePair(molI,molJ);  
+	       }
+	   }
+       }
+   }
+
+}// ompCalculatePairForces
 void Foam::polyMoleculeCloud::calculatePairForces()
 {
 

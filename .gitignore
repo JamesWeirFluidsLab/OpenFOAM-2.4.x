@@ -83,4 +83,7 @@ doc/Doxygen/DTAGS
 # Ignore the test directory
 /tutorialsTest
 
+# Ignore kdevelop generated files
+*.kdev4
+
 # end-of-file

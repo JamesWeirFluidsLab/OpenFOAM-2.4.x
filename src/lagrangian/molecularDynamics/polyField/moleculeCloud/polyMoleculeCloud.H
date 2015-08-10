@@ -52,6 +52,9 @@ SourceFiles
 #include "trackingNumber.H"
 #include "cyclicBoundaries.H"
 #include "cellInteractions.H"
+#include <omp.h>
+#include <vector>
+
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -103,6 +106,9 @@ private:
         
         //- interaction particle list
         List<DynamicList<polyMolecule*> > ipl_;
+	int** staticDil_; 
+	std::vector<int> dilSizeList_;
+	std::vector<int> cellOccSizeList_;
         
 
     // Private Member Functions
@@ -118,6 +124,7 @@ private:
         void accelerationUpdate();
         void velocityUpdate(const scalar& trackTime);
         void updateAfterMove(const scalar& trackTime);
+	void ompCalculatePairForces();
         //- Disallow default bitwise copy construct
         polyMoleculeCloud(const polyMoleculeCloud&);
         //- Disallow default bitwise assignment
@@ -215,6 +222,12 @@ public:
             polyMolecule* molI,
             polyMolecule* molJ
         );
+	
+	void evaluatePairCritical
+	(
+            polyMolecule* molI,
+            polyMolecule* molJ
+        );
 
         inline bool evaluatePotentialLimit
         (
@@ -253,25 +266,25 @@ public:
         
         // Access
 
-            label nSites() const;
-            inline const polyMesh& mesh() const;
-            inline const potential& pot() const;
-            inline const List<DynamicList<polyMolecule*> >& cellOccupancy() const;
-            inline const List<polyMolecule::constantProperties> constProps() const;
-            inline const polyMolecule::constantProperties& constProps(label id) const;
-            inline cachedRandomMD& rndGen();
-            inline const reducedUnits& redUnits() const;
-            inline const polyFieldProperties& fields() const;  
-            inline polyFieldProperties& fields();
-            inline const cyclicBoundaries& cyclics() const;
-            inline const polyBoundaries& boundaries() const;
-            inline polyBoundaries& boundaries();
-            inline const polyControllers& controllersInfo() const; 
-            inline polyControllers& controllersInfo();
-            inline const polyFaceTracker& tracker() const;
-            inline polyFaceTracker& tracker();
-            inline trackingNumber& moleculeTracking();
-            inline cellInteractions<polyMolecule>& il();
+	label nSites() const;
+	inline const polyMesh& mesh() const;
+	inline const potential& pot() const;
+	inline const List<DynamicList<polyMolecule*> >& cellOccupancy() const;
+	inline const List<polyMolecule::constantProperties> constProps() const;
+	inline const polyMolecule::constantProperties& constProps(label id) const;
+	inline cachedRandomMD& rndGen();
+	inline const reducedUnits& redUnits() const;
+	inline const polyFieldProperties& fields() const;  
+	inline polyFieldProperties& fields();
+	inline const cyclicBoundaries& cyclics() const;
+	inline const polyBoundaries& boundaries() const;
+	inline polyBoundaries& boundaries();
+	inline const polyControllers& controllersInfo() const; 
+	inline polyControllers& controllersInfo();
+	inline const polyFaceTracker& tracker() const;
+	inline polyFaceTracker& tracker();
+	inline trackingNumber& moleculeTracking();
+	inline cellInteractions<polyMolecule>& il();
             
     // Member Operators
 
