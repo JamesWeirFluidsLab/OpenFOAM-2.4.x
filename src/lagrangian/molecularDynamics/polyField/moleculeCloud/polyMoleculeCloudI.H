@@ -35,8 +35,8 @@ inline void Foam::polyMoleculeCloud::evaluatePair
     const pairPotentialList& pairPot = pot_.pairPotentials();
     const pairPotential& electrostatic = pairPot.electrostatic();
 
-    label idI = molI->id();
-    label idJ = molJ->id();
+    label idI(molI->id());
+    label idJ(molJ->id());
 
     const polyMolecule::constantProperties& constPropI(constProps(idI));
     const polyMolecule::constantProperties& constPropJ(constProps(idJ));
@@ -53,7 +53,7 @@ inline void Foam::polyMoleculeCloud::evaluatePair
     if(!molI->frozen() || !molJ->frozen())
     {
         // fraction
-        scalar f = molI->fraction();
+        scalar f(molI->fraction());
     
         if(molJ->fraction() < f)
         {
@@ -68,7 +68,7 @@ inline void Foam::polyMoleculeCloud::evaluatePair
             {
                 label sJ = constPropJ.pairPotSites()[pJ];
 
-                Foam::vector rsIsJ = molI->sitePositions()[sI] - molJ->sitePositions()[sJ];
+                Foam::vector rsIsJ(molI->sitePositions()[sI] - molJ->sitePositions()[sJ]);
 
                 scalar rsIsJMagSq = magSqr(rsIsJ);
 

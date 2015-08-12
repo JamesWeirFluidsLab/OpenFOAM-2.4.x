@@ -440,7 +440,19 @@ void Foam::polyMoleculeCloud::checkMoleculesInMesh()
         << endl;
 }
 
+// destructor
+
+Foam::polyMoleculeCloud::~polyMoleculeCloud()
+{
+     if(staticDil_!=NULL){
+	for(int i = 0; i < meshSize_; i++){
+             delete [] staticDil_[i];
+	}
+	delete [] staticDil_;
+     }
+}
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
 
 
 //- Use for running MD (mdFoam)
@@ -468,9 +480,9 @@ Foam::polyMoleculeCloud::polyMoleculeCloud
     cyclics_(t, mesh_, -1), 
     iL_(mesh, rU, cyclics_, pot_.pairPotentials().rCutMax(), "poly"),
     ipl_(mesh.nCells()),
-    staticDil_(new int*[mesh_.nCells()]),
+    staticDil_(0),
     dilSizeList_(mesh_.nCells()),
-    cellOccSizeList_(mesh_.nCells())
+    meshSize_(mesh_.nCells())
 {
     polyMolecule::readFields(*this);
 
@@ -479,6 +491,7 @@ Foam::polyMoleculeCloud::polyMoleculeCloud
     buildConstProps();
     
     // copy all dil information
+    staticDil_ = new int*[mesh_.nCells()];
     forAll(iL_.dil(),d){
 	int size = iL_.dil()[d].size();
 	dilSizeList_[d] = size;
@@ -1102,7 +1115,6 @@ void Foam::polyMoleculeCloud::ompCalculatePairForces()
    forAll(cellOccupancy_,c){
        int size = cellOccupancy_[c].size();
        tempCellOcc[c].resize(size);
-       cellOccSizeList_[c] = size;
        forAll(cellOccupancy_[c],j){
 	   tempCellOcc[c][j] = cellOccupancy_[c][j]; 
        }
@@ -1114,7 +1126,6 @@ void Foam::polyMoleculeCloud::ompCalculatePairForces()
    polyMolecule* cellOcc = tempCellOcc[0][0];
    //pointer to dilsizelist and celloccupancysizelist
    int* dilsize = &dilSizeList_[0];
-   int* cellsize = &cellOccSizeList_[0];
    int sizedil = dilSizeList_.size();
 
 #pragma omp parallel 
@@ -1122,10 +1133,10 @@ void Foam::polyMoleculeCloud::ompCalculatePairForces()
 #pragma omp single nowait
 {
    for(int d = 0; d < sizedil; d++)
-#pragma omp task firstprivate(tempCellOcc,cellsize)
+#pragma omp task firstprivate(tempCellOcc)
    {
-	int sizecellocc = cellsize[d];
 	std::vector<polyMolecule*> templist = tempCellOcc[d];
+	int sizecellocc = templist.size();
 	for(int i = 0; i < sizecellocc; i++)
 	{
 	    polyMolecule* molI = templist[i]; 

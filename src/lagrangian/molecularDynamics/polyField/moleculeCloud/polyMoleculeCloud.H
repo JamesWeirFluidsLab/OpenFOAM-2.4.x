@@ -108,7 +108,7 @@ private:
         List<DynamicList<polyMolecule*> > ipl_;
 	int** staticDil_; 
 	std::vector<int> dilSizeList_;
-	std::vector<int> cellOccSizeList_;
+	int meshSize_;
         
 
     // Private Member Functions
@@ -178,6 +178,8 @@ public:
             const bool& clearFields
         );
 
+    // destructor
+	~polyMoleculeCloud();
 
     // Member Functions
 
