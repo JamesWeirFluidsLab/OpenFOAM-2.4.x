@@ -52,6 +52,7 @@ SourceFiles
 #include "trackingNumber.H"
 #include "cyclicBoundaries.H"
 #include "cellInteractions.H"
+#include "clockTimer.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -104,12 +105,15 @@ private:
         //- interaction particle list
         List<DynamicList<polyMolecule*> > ipl_;
         
+        clockTimer clock_;
+
 
     // Private Member Functions
 
         void buildConstProps();
         void setSiteSizesAndPositions();
         void calculatePairForces();
+        void checkForOverlaps();
         void removeHighEnergyOverlaps();
         void setTrackingNumbers();
         void checkMoleculesInMesh();
@@ -272,6 +276,7 @@ public:
             inline polyFaceTracker& tracker();
             inline trackingNumber& moleculeTracking();
             inline cellInteractions<polyMolecule>& il();
+            inline clockTimer& clock();
             
     // Member Operators
 

@@ -145,6 +145,225 @@ void Foam::polyMoleculeCloud::buildCellOccupancy()
     }
 }
 
+// NEW //
+void Foam::polyMoleculeCloud::checkForOverlaps()
+{
+    Info<< nl << "Removing high energy overlaps, limit = "
+    << pot_.potentialEnergyLimit()
+    << nl << "Removal order:";
+
+    forAll(pot_.removalOrder(), rO)
+    {
+        if(pot_.removalOrder()[rO] != -1)
+        {
+            Info<< ' ' << pot_.idList()[pot_.removalOrder()[rO]];
+        }
+    }
+
+    Info<< nl ;
+
+    label initialSize = this->size();
+
+    if (Pstream::parRun())
+    {
+        reduce(initialSize, sumOp<label>());
+    }
+
+    buildCellOccupancy();
+
+    prepareInteractions();
+
+    DynamicList<polyMolecule*> molsToDelete;
+    DynamicList<label> molsToDeleteTNs;
+
+    polyMolecule* molI = NULL;
+    polyMolecule* molJ = NULL;
+
+    const scalar& potLim = pot_.potentialEnergyLimit();
+
+    {
+        // Real-Real interactions
+        const labelListList& dil = iL_.dil();
+
+        forAll(dil, d)
+        {
+            forAll(cellOccupancy_[d],cellIMols)
+            {
+                molI = cellOccupancy_[d][cellIMols];
+                label idI = molI->id();
+                bool molIDeleted = false;
+                label tNI=molI->trackingNumber();
+
+                forAll(dil[d], interactingCells)
+                {
+                    List<polyMolecule*> cellJ =
+                    cellOccupancy_[dil[d][interactingCells]];
+
+                    forAll(cellJ, cellJMols)
+                    {
+                        molJ = cellJ[cellJMols];
+                        label tNJ = molJ->trackingNumber();
+
+                        label molJDeleted = findIndex(molsToDeleteTNs, tNJ);
+
+                        if(!molIDeleted && (molJDeleted == -1))
+                        {
+                            if(evaluatePotentialLimit(molI, molJ, potLim))
+                            {
+                                label idJ = molJ->id();
+
+                                label removeIdI = findIndex(pot_.removalOrder(), idI);
+                                label removeIdJ = findIndex(pot_.removalOrder(), idJ);
+
+                                if(removeIdI < removeIdJ)
+                                {
+                                    molsToDelete.append(molI);
+                                    molsToDeleteTNs.append(tNI);
+                                    molIDeleted = true;
+                                }
+                                else
+                                {
+                                    molsToDelete.append(molJ);
+                                    molsToDeleteTNs.append(tNJ);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                forAll(cellOccupancy_[d], cellIOtherMols)
+                {
+                    molJ = cellOccupancy_[d][cellIOtherMols];
+                    label tNJ = molJ->trackingNumber();
+
+                    label molJDeleted = findIndex(molsToDeleteTNs, tNJ);
+
+                    if(!molIDeleted && (molJDeleted == -1))
+                    {
+                        if (molJ > molI)
+                        {
+                            if(evaluatePotentialLimit(molI, molJ, potLim))
+                            {
+                                label idJ = molJ->id();
+
+                                label removeIdI = findIndex(pot_.removalOrder(), idI);
+                                label removeIdJ = findIndex(pot_.removalOrder(), idJ);
+
+                                if(removeIdI < removeIdJ)
+                                {
+                                    molsToDelete.append(molI);
+                                    molsToDeleteTNs.append(tNI);
+                                    molIDeleted = true;
+                                }
+                                else
+                                {
+                                    molsToDelete.append(molJ);
+                                    molsToDeleteTNs.append(tNJ);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    {
+        // Real-Referred interactions
+        forAll(iL_.refCellsParticles(), r)
+        {
+            const List<label>& realCells = iL_.refCells()[r].neighbouringCells();
+
+            forAll(iL_.refCellsParticles()[r], i)
+            {
+                molJ = iL_.refCellsParticles()[r][i];
+                label tNJ = molJ->trackingNumber();
+
+                label molJDeleted = findIndex(molsToDeleteTNs, tNJ);
+
+                if(molJDeleted == -1)
+                {
+                    forAll(realCells, rC)
+                    {
+                        List<polyMolecule*> molsInCell = cellOccupancy_[realCells[rC]];
+
+                        forAll(molsInCell, j)
+                        {
+                            molI = molsInCell[j];
+                            label tNI = molI->trackingNumber();
+
+                            label molIDeleted = findIndex(molsToDeleteTNs, tNI);
+
+                            if(molIDeleted == -1)
+                            {
+                                if(evaluatePotentialLimit(molI, molJ, potLim))
+                                {
+                                    label idJ = molJ->id();
+                                    label idI = molI->id();
+
+                                    label removeIdI = findIndex(pot_.removalOrder(), idI);
+                                    label removeIdJ = findIndex(pot_.removalOrder(), idJ);
+
+                                    if(removeIdI < removeIdJ)
+                                    {
+                                        molsToDelete.append(molI);
+                                        molsToDeleteTNs.append(tNI);
+                                    }
+                                    else if(removeIdI == removeIdJ)
+                                    {
+                                        if (molI->trackingNumber() > molJ->trackingNumber())
+                                        {
+                                            molsToDelete.append(molI);
+                                            molsToDeleteTNs.append(tNI);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    label nMolsDeleted = 0;
+
+    forAll (molsToDelete, mTD)
+    {
+        nMolsDeleted++;
+
+        Pout << nl << " WARNING: Deleting molecule "
+            <<  " proc no = " << Pstream::myProcNo()
+            << ", position = " << molsToDelete[mTD]->position()
+            << ", molecule = " << pot_.idList()[molsToDelete[mTD]->id()]
+            << endl;
+
+        deleteParticle(*(molsToDelete[mTD]));
+
+    }
+
+    if (Pstream::parRun())
+    {
+        reduce(nMolsDeleted, sumOp<label>());
+    }
+
+    if(nMolsDeleted > 0)
+    {
+        Info << nl << " WARNING: Total number of molecules deleted = " << nMolsDeleted << endl;
+    }
+    else
+    {
+        Info << " NO OVERLAPPING MOLECULES" << endl;
+    }
+
+    molsToDelete.clear();
+
+    buildCellOccupancy();
+
+    prepareInteractions();
+}
+
 void Foam::polyMoleculeCloud::removeHighEnergyOverlaps()
 {
     Info<< nl << "Removing high energy overlaps, limit = "
@@ -407,10 +626,6 @@ void Foam::polyMoleculeCloud::checkMoleculesInMesh()
         }
         else
         {
-            Pout<< "WARNING - molecule outside mesh at position = "
-                << mol().position()
-                << endl;
-                
             polyMolecule* molI = &mol();
             molsToDelete.append(molI);
         }
@@ -425,6 +640,12 @@ void Foam::polyMoleculeCloud::checkMoleculesInMesh()
 
     forAll (molsToDelete, mTD)
     {
+    	Pout << nl << " WARNING: Molecule Outside Mesh - Deleting molecule "
+    	            <<  " proc no = " << Pstream::myProcNo()
+    	            << ", position = " << molsToDelete[mTD]->position()
+    	            << ", molecule = " << pot_.idList()[molsToDelete[mTD]->id()]
+    	            << endl;
+
         deleteParticle(*(molsToDelete[mTD]));
     }
 
@@ -468,6 +689,7 @@ Foam::polyMoleculeCloud::polyMoleculeCloud
     cyclics_(t, mesh_, -1), 
     iL_(mesh, rU, cyclics_, pot_.pairPotentials().rCutMax(), "poly"),
     ipl_(mesh.nCells())
+	clock_(t, "evolve", true)
 {
     polyMolecule::readFields(*this);
 
@@ -482,7 +704,8 @@ Foam::polyMoleculeCloud::polyMoleculeCloud
     // set tracking numbers
     setTrackingNumbers();
 
-    removeHighEnergyOverlaps();
+    //removeHighEnergyOverlaps();
+    checkForOverlaps();
     
     buildCellOccupancy();
     clearLagrangianFields();
@@ -526,6 +749,7 @@ Foam::polyMoleculeCloud::polyMoleculeCloud
     cyclics_(t, mesh_, -1),
     iL_(mesh, rU, cyclics_, pot_.pairPotentials().rCutMax(), "poly"),
     ipl_(mesh.nCells())
+	clock_(t, "evolve", true)
 {
     polyMolecule::readFields(*this);
 

@@ -104,6 +104,8 @@ timeVaryingForce::timeVaryingForce
     }
     
     binWidth_ = forces[1].first()-forces[0].first();
+
+    Info << "binWidth = " << binWidth_ << endl;
 }
 
 
