@@ -688,7 +688,7 @@ Foam::polyMoleculeCloud::polyMoleculeCloud
     moleculeTracking_(),
     cyclics_(t, mesh_, -1), 
     iL_(mesh, rU, cyclics_, pot_.pairPotentials().rCutMax(), "poly"),
-    ipl_(mesh.nCells())
+    ipl_(mesh.nCells()),
 	clock_(t, "evolve", true)
 {
     polyMolecule::readFields(*this);
@@ -748,7 +748,7 @@ Foam::polyMoleculeCloud::polyMoleculeCloud
     moleculeTracking_(),
     cyclics_(t, mesh_, -1),
     iL_(mesh, rU, cyclics_, pot_.pairPotentials().rCutMax(), "poly"),
-    ipl_(mesh.nCells())
+    ipl_(mesh.nCells()),
 	clock_(t, "evolve", true)
 {
     polyMolecule::readFields(*this);
