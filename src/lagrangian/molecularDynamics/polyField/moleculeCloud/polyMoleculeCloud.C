@@ -1130,7 +1130,7 @@ void Foam::polyMoleculeCloud::ompCalculatePairForces()
 
 #pragma omp parallel 
 {
-#pragma omp single nowait
+#pragma omp master
 {
    for(int d = 0; d < sizedil; d++)
 #pragma omp task firstprivate(tempCellOcc)
@@ -1154,7 +1154,7 @@ void Foam::polyMoleculeCloud::ompCalculatePairForces()
     {
 #pragma omp parallel
       {
-#pragma omp single nowait
+#pragma omp master
 	{
 	std::vector<polyMolecule*> templistI = tempCellOcc[d];
 	int size = templistI.size();
