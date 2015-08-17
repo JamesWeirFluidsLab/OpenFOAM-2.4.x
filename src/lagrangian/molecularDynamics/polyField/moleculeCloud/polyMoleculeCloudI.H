@@ -395,4 +395,9 @@ inline Foam::trackingNumber& Foam::polyMoleculeCloud::moleculeTracking()
     return moleculeTracking_;
 }
 
+inline Foam::clockTimer& Foam::polyMoleculeCloud::clock()
+{
+    return clock_;
+}
+
 // ************************************************************************* //

@@ -53,25 +53,9 @@ polyMappingZone::polyMappingZone
 :
     polyMappingModel(molCloud, dict),
     propsDict_(dict.subDict(typeName + "Properties")),
-//     regionName_(propsDict_.lookup("zoneName")),
-//     regionId_(-1),
     translation_(propsDict_.lookup("translationalVector")),
-//     oneSpecie_(false),
-//     molId_(-1)
-//     deleteMols_(false),
     molIds_()
 {
-//     const cellZoneMesh& cellZones = mesh_.cellZones();
-//     regionId_ = cellZones.findZoneID(regionName_);
-// 
-//     if(regionId_ == -1)
-//     {
-//         FatalErrorIn("polyMappingZone::polyMappingZone()")
-//             << "Cannot find region: " << regionName_ << nl << "in: "
-//             << mesh_.time().system()/"molsToDeleteDict"
-//             << exit(FatalError);
-//     }
-
     molIds_.clear();
 
     selectIds ids
@@ -81,8 +65,6 @@ polyMappingZone::polyMappingZone
     );
 
     molIds_ = ids.molIds();
-
-//     deleteMols_ = Switch(propsDict_.lookup("deleteMolsShiftedOutOfZone"));
 
     findMolsToMap();
 }
@@ -98,33 +80,50 @@ polyMappingZone::~polyMappingZone()
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 void polyMappingZone::findMolsToMap()
 {
-
     DynamicList<polyMolecule*> molsToDelete;
     
     {
-        IDLList<polyMolecule>::iterator molI(molCloud_.begin());
+        IDLList<polyMolecule>::iterator mol(molCloud_.begin());
 
         for
         (
-            molI = molCloud_.begin();
-            molI != molCloud_.end();
-            ++molI
+            mol = molCloud_.begin();
+            mol != molCloud_.end();
+            ++mol
         )
         {
-            if(findIndex(molIds_, molI().id()) != -1)
+            if(findIndex(molIds_, mol().id()) != -1)
             {
-                vector newPos = molI().position() + translation_;
+                vector newPos = mol().position() + translation_;
 
-                label cell = mesh_.findCell(newPos);
+                label cell = -1;
+                label tetFace = -1;
+                label tetPt = -1;
+
+                mesh_.findCellFacePt
+                (
+                    newPos,
+                    cell,
+                    tetFace,
+                    tetPt
+                );
                 
                 if(cell == -1)
                 {
-                    polyMolecule* mol = &molI();
-                    molsToDelete.append(mol);                        
+                    polyMolecule* molI = &mol();
+                    molsToDelete.append(molI);
                 }
                 
-                molI().position() = newPos;
-                molI().cell() = cell;
+                mol().position() = newPos;
+                mol().cell() = cell;
+                mol().tetFace() = tetFace;
+                mol().tetPt() = tetPt;
+
+                // shift the sites too
+                forAll( mol().sitePositions(), i )
+                {
+                    mol().sitePositions()[i] += translation_;
+                }
             }
         }
     }
@@ -138,10 +137,7 @@ void polyMappingZone::findMolsToMap()
     {
         molCloud_.deleteParticle(*(molsToDelete[mTD]));
     }
-
-
 }
-
 
 } // End namespace Foam
 
