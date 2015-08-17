@@ -37,6 +37,8 @@ SourceFiles
 #ifndef polyMoleculeCloud_H
 #define polyMoleculeCloud_H
 
+#include <omp.h>
+#include <vector>
 #include "Cloud.H"
 #include "polyMolecule.H"
 #include "IOdictionary.H"
@@ -52,9 +54,7 @@ SourceFiles
 #include "trackingNumber.H"
 #include "cyclicBoundaries.H"
 #include "cellInteractions.H"
-#include <omp.h>
-#include <vector>
-
+#include "clockTimer.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -110,12 +110,15 @@ private:
 	std::vector<int> dilSizeList_;
 	int meshSize_;
         
+        clockTimer clock_;
+
 
     // Private Member Functions
 
         void buildConstProps();
         void setSiteSizesAndPositions();
         void calculatePairForces();
+        void checkForOverlaps();
         void removeHighEnergyOverlaps();
         void setTrackingNumbers();
         void checkMoleculesInMesh();
@@ -267,7 +270,6 @@ public:
         void writeReferredCloud();
         
         // Access
-
 	label nSites() const;
 	inline const polyMesh& mesh() const;
 	inline const potential& pot() const;
@@ -287,6 +289,7 @@ public:
 	inline polyFaceTracker& tracker();
 	inline trackingNumber& moleculeTracking();
 	inline cellInteractions<polyMolecule>& il();
+	inline clockTimer& clock();
             
     // Member Operators
 

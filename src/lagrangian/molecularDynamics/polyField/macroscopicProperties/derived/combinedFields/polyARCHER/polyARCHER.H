@@ -23,25 +23,27 @@ License
     Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 
 Class
-    polyMappingZone
 
 Description
+    The model which outputs standard properties to the terminal screen 
+    in an MD simulation run.
 
 SourceFiles
-    polyMappingZoneI.H
-    polyMappingZone.C
-    polyMappingZoneIO.C
+    polyARCHERI.H
+    polyARCHER.C
+    polyARCHERIO.C
 
 \*---------------------------------------------------------------------------*/
 
-#ifndef polyMappingZone_H
-#define polyMappingZone_H
+#ifndef polyARCHER_H
+#define polyARCHER_H
 
-#include "polyMappingModel.H"
+#include "polyField.H"
 #include "vector.H"
 #include "polyMesh.H"
 #include "volFields.H"
 #include "polyMoleculeCloud.H"
+
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -49,12 +51,12 @@ namespace Foam
 {
 
 /*---------------------------------------------------------------------------*\
-                           Class polyMappingZone Declaration
+                           Class polyARCHER Declaration
 \*---------------------------------------------------------------------------*/
 
-class polyMappingZone
+class polyARCHER
 :
-	public polyMappingModel
+	public polyField
 {
 
 private:
@@ -63,42 +65,66 @@ private:
 
         //- subDictionary containing the properties
         dictionary propsDict_;
-
-
-        //- name of control zone
-        vector translation_;
-
-        List<label> molIds_;
-
-
-
+        
+        propertyField fields_;
+        
+        word nameOfFile_;
+        
+        fileName pathName_;
+        
     // Private Member Functions
-
-        void findMolsToMap();
-
+    
+        void outputInitialisation();
+        void outputTime();
+        
+        
 public:
 
     //- Runtime type information
-    TypeName("polyMappingZone");
+    TypeName("polyARCHER");
 
     // Constructors
 
         //- Construct from components
-        polyMappingZone
+        polyARCHER
 		(
+            Time& t,
+            const polyMesh& mesh,
             polyMoleculeCloud& molCloud,
             const dictionary& dict
 		);
 
     // Destructor
 
- 		~polyMappingZone();
-
+ 		~polyARCHER();
 
     // Member Functions
 
- 
-};
+        //- create initial field
+        void createField();
+
+        //- calculate field
+        void calculateField();
+
+        //- write field
+        void writeField();
+
+        void measureDuringForceComputation
+        (
+            polyMolecule* molI,
+            polyMolecule* molJ
+        );
+
+        void measureDuringForceComputationSite
+        (
+            polyMolecule* molI,
+            polyMolecule* molJ,
+            label sI,
+            label sJ
+        );
+
+        const propertyField& fields() const;
+}; 		
 
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //

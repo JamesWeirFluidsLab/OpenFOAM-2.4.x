@@ -179,7 +179,14 @@ void clockTimer::stopClock()
 
 scalar clockTimer::averageTime()
 {
-    return duration_/timeIndex_;
+    if(duration_ > 0)
+    {
+        return duration_/timeIndex_;
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 const scalar& clockTimer::instantDuration() const

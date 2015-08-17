@@ -39,6 +39,7 @@ SourceFiles
 #include "word.H"
 #include "pairPotential.H"
 #include "polyMesh.H"
+#include "reducedUnits.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -123,6 +124,8 @@ public:
             inline scalar rCutMax() const;
 
             inline scalar rCutMaxSqr() const;
+
+            inline scalar rCutMaxSqrWithBuffer() const;
 
             bool rCutMaxSqr(scalar rIJMagSqr) const;
 

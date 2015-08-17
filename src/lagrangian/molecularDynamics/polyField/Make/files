@@ -54,6 +54,8 @@ macroscopicProperties/derived/combinedFields/polyBinsMethod/polyBinsMethod.C
 macroscopicProperties/derived/combinedFields/polyPropertiesZone/polyPropertiesZone.C
 macroscopicProperties/derived/combinedFields/polyPropertyFields/polyPropertyFields.C
 macroscopicProperties/derived/combinedFields/polyInstantPropertiesZoneBounded/polyInstantPropertiesZoneBounded.C
+macroscopicProperties/derived/combinedFields/polyARCHER/polyARCHER.C
+macroscopicProperties/derived/combinedFields/polyARCHER/polyARCHER_outputFiles.C
 
 
 /*  - MASS FLUX  */
