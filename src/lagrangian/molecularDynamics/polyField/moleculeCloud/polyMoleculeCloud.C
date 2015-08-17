@@ -1120,24 +1120,22 @@ void Foam::polyMoleculeCloud::ompCalculatePairForces()
        }
    }
    
-   const labelListList& dil = iL_.dil();
    int** tempdil = &staticDil_[0];
 
-   polyMolecule* cellOcc = tempCellOcc[0][0];
    //pointer to dilsizelist and celloccupancysizelist
    int* dilsize = &dilSizeList_[0];
    int sizedil = dilSizeList_.size();
 
+   for(int d = 0; d < sizedil; d++)
+   {
+	std::vector<polyMolecule*> templist = tempCellOcc[d];
+	int sizecellocc = templist.size();
 #pragma omp parallel 
 {
 #pragma omp master
 {
-   for(int d = 0; d < sizedil; d++)
-#pragma omp task firstprivate(tempCellOcc)
-   {
-	std::vector<polyMolecule*> templist = tempCellOcc[d];
-	int sizecellocc = templist.size();
 	for(int i = 0; i < sizecellocc; i++)
+#pragma omp task firstprivate(templist)
 	{
 	    polyMolecule* molI = templist[i]; 
 	    for(int j = i+1; j < sizecellocc; j++)
@@ -1146,36 +1144,36 @@ void Foam::polyMoleculeCloud::ompCalculatePairForces()
 		evaluatePair(molI,molJ);
 	    }	    
 	}
-   }
-}//end single region
+	}//end single region
 }//end parallel region 
+   }
 
     for(int d = 0; d < sizedil; d++)
     {
+	std::vector<polyMolecule*> templistI = tempCellOcc[d];
+	int size = templistI.size();
+	for(int cellI = 0; cellI < size; cellI++)
+	{  
+	    polyMolecule* molI = templistI[cellI];
+	    int sizeDilD = dilsize[d];
 #pragma omp parallel
       {
 #pragma omp master
 	{
-	std::vector<polyMolecule*> templistI = tempCellOcc[d];
-	int size = templistI.size();
-	for(int cellI = 0; cellI < size; cellI++)
-#pragma omp task firstprivate(templistI,tempCellOcc,dilsize)
-	{
-	    polyMolecule* molI = templistI[cellI];
-	    int sizeDilD = dilsize[d];
 	    for(int dj = 0; dj < sizeDilD; dj++)
+#pragma omp task firstprivate(templistI,tempCellOcc,dilsize)
 		{
 		    std::vector<polyMolecule*> cellJList = tempCellOcc[tempdil[d][dj]];
 		    int sizeCellJ = cellJList.size();
 		    for(int cellJ = 0; cellJ < sizeCellJ; cellJ++)
 		    {
 			polyMolecule* molJ = cellJList[cellJ];
-			evaluatePairCritical(molI,molJ);
+			evaluatePair(molI,molJ);
 		    }//cellJ ends
 		}// dj ends
-	}
-	}//end single
+		}//end single
       }//end parallel region
+	}
     }
    
    // Real-Referred interactions

@@ -81,26 +81,30 @@ inline void Foam::polyMoleculeCloud::evaluatePair
 
                     Foam::vector fsIsJ = (rsIsJMag == 0.0? Foam::vector::zero : (f * (rsIsJ/rsIsJMag) * pairPot.force(idsI, idsJ, rsIsJMag)));
 
-                    molI->siteForces()[sI] += fsIsJ;
-
-                    molJ->siteForces()[sJ] += -fsIsJ;
-
                     scalar potentialEnergy
                     (
                         f*pairPot.energy(idsI, idsJ, rsIsJMag)
                     );
 
-                    molI->potentialEnergy() += 0.5*potentialEnergy;
-        
-                    molJ->potentialEnergy() += 0.5*potentialEnergy;
+            
         
                     Foam::vector rIJ = molI->position() - molJ->position();
         
                     Foam::tensor virialContribution = (rsIsJMagSq == 0.0? (rsIsJ*fsIsJ)*(rsIsJ & rIJ): (rsIsJ*fsIsJ)*(rsIsJ & rIJ)/rsIsJMagSq);
+		    
+#pragma omp critical (forceupdate)
+		    {		    
+		    molI->potentialEnergy() += 0.5*potentialEnergy;
+        
+                    molJ->potentialEnergy() += 0.5*potentialEnergy;
+		    
+		    molI->siteForces()[sI] += fsIsJ;
+
+                    molJ->siteForces()[sJ] += -fsIsJ;
         
                     molI->rf() += virialContribution;
                     molJ->rf() += virialContribution;
-
+		    }
                     fields_.measurementsDuringForceComputationSite
                     (
                         molI,
